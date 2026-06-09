@@ -26,6 +26,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 const platform = isMobile ? 'mobile' : 'web';
 const enableViteDevTools = process.env.LOBE_VITE_DEVTOOLS === 'true';
 
+if (isDev) process.title = `lobe-dev-vite-${platform}`;
+
 const resolveCommandExecutable = (cmd: string) => {
   const pathValue = process.env.PATH;
   if (!pathValue) return;
@@ -99,6 +101,12 @@ const openExternalBrowser = async (
     }
   });
 };
+
+const devTopology = process.env.LOBE_DEV_TOPOLOGY;
+const honoLite = devTopology === 'hono-lite' || devTopology === 'hono';
+const apiTarget = honoLite
+  ? `http://localhost:${process.env.HONO_PORT || 3011}`
+  : `http://localhost:${process.env.PORT || 3010}`;
 
 export default defineConfig({
   base: isDev ? '/' : process.env.VITE_CDN_BASE || '/_spa/',
@@ -242,8 +250,19 @@ export default defineConfig({
         }
 
         return () => {
+          const originalPrintUrls = server.printUrls.bind(server);
+          const printHonoUrl = () => {
+            if (process.env.LOBE_DEV_TOPOLOGY !== 'hono-lite') return;
+            const honoPort = process.env.HONO_PORT || '3011';
+            const honoUrl = `http://localhost:${honoPort}/`;
+            const colorUrl = (url: string) =>
+              c.cyan(url.replace(/:(\d+)\//, (_, port) => `:${c.bold(port)}/`));
+            info(`  ${c.green('➜')}  ${c.bold('Hono API')}:    ${colorUrl(honoUrl)}`);
+          };
           server.printUrls = () => {
             if (isBundledDev) return;
+            originalPrintUrls();
+            printHonoUrl();
             printProxyUrl();
           };
         };
@@ -297,10 +316,12 @@ export default defineConfig({
     host: true,
     port: 9876,
     proxy: {
-      '/api': `http://localhost:${process.env.PORT || 3010}`,
-      '/oidc': `http://localhost:${process.env.PORT || 3010}`,
-      '/trpc': `http://localhost:${process.env.PORT || 3010}`,
-      '/webapi': `http://localhost:${process.env.PORT || 3010}`,
+      '/api': apiTarget,
+      '/f': apiTarget,
+      '/market': apiTarget,
+      '/oidc': apiTarget,
+      '/trpc': apiTarget,
+      '/webapi': apiTarget,
     },
     warmup: {
       clientFiles: [

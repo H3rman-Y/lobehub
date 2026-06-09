@@ -7,7 +7,6 @@ import { AsyncTaskStatus } from '@/types/asyncTask';
 // ---- hoisted mocks (available inside vi.mock factories) ----
 
 const {
-  mockAfter,
   mockCreateVideo,
   mockLoadModels,
   mockProcessBackgroundVideoPolling,
@@ -18,12 +17,10 @@ const {
   const mockTransaction = vi.fn();
   const mockServerDB = { transaction: mockTransaction };
   const mockCreateVideo = vi.fn();
-  const mockAfter = vi.fn((cb: () => void) => cb());
   const mockLoadModels = vi.fn();
   const mockProcessBackgroundVideoPolling = vi.fn().mockResolvedValue(undefined);
   const mockResolveBusinessModelMapping = vi.fn();
   return {
-    mockAfter,
     mockCreateVideo,
     mockLoadModels,
     mockProcessBackgroundVideoPolling,
@@ -64,7 +61,6 @@ vi.mock('@lobechat/business-model-bank/model-config', () => ({
 vi.mock('@/business/server/video-generation/getVideoFreeQuota', () => ({
   getVideoFreeQuota: vi.fn().mockResolvedValue({ remaining: 10 }),
 }));
-vi.mock('next/server', () => ({ after: (cb: () => void) => mockAfter(cb) }));
 vi.mock('@/server/services/generation/videoBackgroundPolling', () => ({
   processBackgroundVideoPolling: mockProcessBackgroundVideoPolling,
 }));
@@ -88,6 +84,8 @@ const txResult = {
   batch: { id: 'batch-1' },
   generation: { id: 'gen-1' },
 };
+
+const flushAfterResponseTasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Minimal drizzle-like chain mocks
 function createInsertChain() {
@@ -171,7 +169,8 @@ describe('videoRouter', () => {
         status: AsyncTaskStatus.Processing,
       });
       // Webhook: should NOT trigger background polling
-      expect(mockAfter).not.toHaveBeenCalled();
+      await flushAfterResponseTasks();
+      expect(mockProcessBackgroundVideoPolling).not.toHaveBeenCalled();
     });
 
     it('should validate mapped model id before rejecting deprecated lobehub video models', async () => {
@@ -209,8 +208,7 @@ describe('videoRouter', () => {
         inferenceId: 'inf-2',
         status: AsyncTaskStatus.Processing,
       });
-      // Polling: should trigger background polling via after()
-      expect(mockAfter).toHaveBeenCalled();
+      await flushAfterResponseTasks();
       expect(mockProcessBackgroundVideoPolling).toHaveBeenCalled();
     });
 
@@ -229,8 +227,7 @@ describe('videoRouter', () => {
         inferenceId: 'inf-3',
         status: AsyncTaskStatus.Processing,
       });
-      // No special videoUrl branch — falls through to polling
-      expect(mockAfter).toHaveBeenCalled();
+      await flushAfterResponseTasks();
       expect(mockProcessBackgroundVideoPolling).toHaveBeenCalled();
     });
 
@@ -241,8 +238,7 @@ describe('videoRouter', () => {
       const caller = videoRouter.createCaller(mockCtx);
       await caller.createVideo(defaultInput);
 
-      // useWebhook=false means not webhook, should fall to polling
-      expect(mockAfter).toHaveBeenCalled();
+      await flushAfterResponseTasks();
       expect(mockProcessBackgroundVideoPolling).toHaveBeenCalled();
     });
   });
